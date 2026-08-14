@@ -43,10 +43,10 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
   })().compute(count).setName('Initialize Particles');
 
-  const resetVelocityCompute = Fn(() => {
+/*  const resetVelocityCompute = Fn(() => {
   const v = velocityBuffer.element(instanceIndex);
   v.assign(vec3(0.0)); // Frena las partículas en seco
-})().compute(count).setName('Reset Velocity');
+})().compute(count).setName('Reset Velocity'); */
 
   // UPDATE / COMPUTE SHADER ----------------------------------------------
   // This is the conceptual heart of the project:
