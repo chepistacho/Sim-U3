@@ -95,7 +95,7 @@ async function main() {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.08;
     }
-    //simulation.resetVelocity();
+    simulation.resetVelocity();
     panel?.refresh();
   };
 
