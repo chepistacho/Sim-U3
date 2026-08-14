@@ -134,16 +134,23 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   }
 
 const resetVelocityCompute = Fn(() => {
-  const v = velocityBuffer.element(instanceIndex);
-  // Le metemos un valor casi nulo para matar la inercia sin generar NaNs
-  v.assign(vec3(0.0001)); 
-})().compute(count).setName('Reset Velocity');
+    const i = instanceIndex;
+    const v = velocityBuffer.element(i);
+    
+    // Generamos un ruido al azar quemado, pa' no depender de params.initialSpeed
+    const r1 = hash(i.add(uint(123))).sub(0.5);
+    const r2 = hash(i.add(uint(456))).sub(0.5);
+    const r3 = hash(i.add(uint(789))).sub(0.5);
+
+    // Matamos la inercia dejándola en 0 y le sumamos el empujoncito aleatorio
+    v.assign(vec3(0.0).add(vec3(r1, r2, r3).mul(0.5)));
+  })().compute(count).setName('Reset Velocity');
 
   return {
     count,
     positionBuffer,
     velocityBuffer,
-    resetVelocity,
+    resetVelocity: () => renderer.compute(resetVelocityCompute),
     reset,
     stepSimulation,
     dispose
