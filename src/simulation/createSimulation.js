@@ -133,9 +133,12 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     scene.remove(mesh);
   }
 
-  function resetVelocity() {
-  renderer.compute(resetVelocityCompute);
-}
+  const resetVelocityCompute = Fn(() => {
+    const v = velocityBuffer.element(instanceIndex);
+    // En vez de frenarlas a 0.0, las multiplicamos por una fracción.
+    // Esto les tumba el 95% de la velocidad, pero las deja vivas.
+    v.assign(v.mul(0.05)); 
+  })().compute(count).setName('Reset Velocity');
 
   return {
     count,
