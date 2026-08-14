@@ -13,7 +13,9 @@ import {
   uint,
   uv,
   vec3,
-  vec4
+  vec4,
+  float,
+  vec2
 } from 'three/tsl';
 
 export function createSimulation({ renderer, scene, params, count = 131072 }) {
@@ -28,13 +30,14 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const i = instanceIndex;
     const p = positionBuffer.element(i);
     const v = velocityBuffer.element(i);
+    const iFloat = float(i);
 
-    const r1 = hash(i.add(uint(11)));
-    const r2 = hash(i.add(uint(23)));
-    const r3 = hash(i.add(uint(37)));
-    const r4 = hash(i.add(uint(53)));
-    const r5 = hash(i.add(uint(71)));
-    const r6 = hash(i.add(uint(89)));
+    const r1 = hash(vec2(iFloat, 11.0));
+    const r2 = hash(vec2(iFloat, 23.0));
+    const r3 = hash(vec2(iFloat, 37.0));
+    const r4 = hash(vec2(iFloat, 53.0));
+    const r5 = hash(vec2(iFloat, 71.0));
+    const r6 = hash(vec2(iFloat, 89.0));
 
     p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsSize.mul(0.45)));
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
@@ -134,24 +137,19 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   }
 
 const resetVelocityCompute = Fn(() => {
-    const i = instanceIndex;
-    const p = positionBuffer.element(i);
-    const v = velocityBuffer.element(i);
-    
-    // 1. Generamos un vector de ruido (caos) usando la semilla que ya tenía
-    const r1 = hash(i.add(uint(123)));
-    const r2 = hash(i.add(uint(456)));
-    const r3 = hash(i.add(uint(789)));
-    const noise = vec3(r1, r2, r3).sub(0.5);
+ const i = instanceIndex;
+ const p = positionBuffer.element(i);
+ const v = velocityBuffer.element(i);
+ 
+ const iFloat = float(i);
+ const r1 = hash(vec2(iFloat, 123.0));
+ const r2 = hash(vec2(iFloat, 456.0));
+ const r3 = hash(vec2(iFloat, 789.0));
+ const noise = vec3(r1, r2, r3).sub(0.5);
 
-    // 2. DESMASACOTADOR: Les sumamos un pelito de ruido a la posición.
-    // Esto las separa forzosamente en el espacio pa' que la matemática del shader no las trate como un solo ente.
-    p.addAssign(noise.mul(0.15));
-
-    // 3. FRENADA: Matamos la inercia, pero las dejamos con un micro-empujón 
-    // pa' que no haya división por cero en el normalize() del límite de velocidad.
-    v.assign(noise.mul(0.05));
-  })().compute(count).setName('Reset Velocity');
+ p.addAssign(noise.mul(0.15));
+ v.assign(noise.mul(0.05));
+})().compute(count).setName('Reset Velocity');
 
   return {
     count,
