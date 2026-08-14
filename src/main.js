@@ -7,7 +7,7 @@ import { createParameters } from './simulation/parameters.js';
 import { createSimulation } from './simulation/createSimulation.js';
 import { createLabPanel } from './ui/labPanel.js';
 
-const PARTICLE_COUNT = 262144; // 2^17. Increase only after measuring performance.
+const PARTICLE_COUNT = 524288; // 2^17. Increase only after measuring performance.
 
 async function main() {
   const mount = document.querySelector('#app');
