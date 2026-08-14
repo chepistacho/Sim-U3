@@ -154,7 +154,7 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  simulation.reset();
+  //simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------
   renderer.setAnimationLoop(() => {
