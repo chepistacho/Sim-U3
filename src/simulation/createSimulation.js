@@ -135,15 +135,22 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
 
 const resetVelocityCompute = Fn(() => {
     const i = instanceIndex;
+    const p = positionBuffer.element(i);
     const v = velocityBuffer.element(i);
     
-    // Generamos un ruido al azar quemado, pa' no depender de params.initialSpeed
-    const r1 = hash(i.add(uint(123))).sub(0.5);
-    const r2 = hash(i.add(uint(456))).sub(0.5);
-    const r3 = hash(i.add(uint(789))).sub(0.5);
+    // 1. Generamos un vector de ruido (caos) usando la semilla que ya tenía
+    const r1 = hash(i.add(uint(123)));
+    const r2 = hash(i.add(uint(456)));
+    const r3 = hash(i.add(uint(789)));
+    const noise = vec3(r1, r2, r3).sub(0.5);
 
-    // Matamos la inercia dejándola en 0 y le sumamos el empujoncito aleatorio
-    v.assign(vec3(0.0).add(vec3(r1, r2, r3).mul(0.5)));
+    // 2. DESMASACOTADOR: Les sumamos un pelito de ruido a la posición.
+    // Esto las separa forzosamente en el espacio pa' que la matemática del shader no las trate como un solo ente.
+    p.addAssign(noise.mul(0.15));
+
+    // 3. FRENADA: Matamos la inercia, pero las dejamos con un micro-empujón 
+    // pa' que no haya división por cero en el normalize() del límite de velocidad.
+    v.assign(noise.mul(0.05));
   })().compute(count).setName('Reset Velocity');
 
   return {
