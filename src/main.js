@@ -111,7 +111,9 @@ async function main() {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.08;
     }
-    simulation.reset();
+    // No reiniciamos la simulación aquí: las partículas conservan su
+    // posición y velocidad actuales; solo cambia el campo de fuerzas
+    // que el compute shader aplicará a partir del próximo frame.
     panel?.refresh();
   };
 
