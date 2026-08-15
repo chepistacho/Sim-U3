@@ -7,7 +7,22 @@ import { createParameters } from './simulation/parameters.js';
 import { createSimulation } from './simulation/createSimulation.js';
 import { createLabPanel } from './ui/labPanel.js';
 
-const PARTICLE_COUNT = 524288; // 2^17. Increase only after measuring performance.
+
+
+/*
+2^15: 32768
+2^16: 65536
+2^17: 131072
+2^18: 262144
+2^19: 524288
+2^20: 1048576
+2^21: 2097152
+2^22: 4194304
+2^23: 8388608
+2^24: 16777216
+*/
+
+const PARTICLE_COUNT = 131072; //2^17. Increase only after measuring performance.
 
 async function main() {
   const mount = document.querySelector('#app');
@@ -67,6 +82,7 @@ async function main() {
   let mode = 'LAB';
   let panel;
   let savedRadialStrength = params.radialStrength.value;
+  let savedRadialEnabled = params.radialEnabled.value;
 
   const applyPreset = (id) => {
     params.windEnabled.value = 0;
@@ -95,7 +111,7 @@ async function main() {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.08;
     }
-    simulation.resetVelocity();
+    simulation.reset();
     panel?.refresh();
   };
 
@@ -105,10 +121,11 @@ async function main() {
     panel.setVisible(lab);
     axes.visible = lab;
     attractorHelper.visible = lab;
-    orbit.enabled = lab;
+    //orbit.enabled = lab;
     hud.innerHTML = lab
       ? '<strong>LAB</strong> · P: performance · R: reset · 1–5: pruebas'
-      : '<strong>PERFORMANCE</strong> · P: lab · espacio: invertir radial · puntero: atractor';
+      //: '<strong>PERFORMANCE</strong> · P: lab · espacio: invertir radial · puntero: atractor';
+      : '';
   };
 
   panel = createLabPanel({
@@ -127,6 +144,7 @@ async function main() {
   // BASELINE LIVE INSTRUMENT MAPPING -------------------------------------
   // Students are expected to redesign this mapping for their own instrument.
   addEventListener('keydown', (event) => {
+    //console.log('radial inverted', params.radialStrength.value);
     if (event.repeat) return;
     if (event.code === 'KeyP') setMode(mode === 'LAB' ? 'PERFORMANCE' : 'LAB');
     if (event.code === 'KeyR') simulation.reset();
@@ -138,14 +156,20 @@ async function main() {
 
     if (event.code === 'Space') {
       event.preventDefault();
-      savedRadialStrength = params.radialStrength.value || 2.0;
+      //savedRadialStrength = params.radialStrength.value || 2.0;
+      savedRadialStrength = params.radialStrength.value;
+      savedRadialEnabled = params.radialEnabled.value;
       params.radialEnabled.value = 1;
-      params.radialStrength.value = -savedRadialStrength;
+      params.radialStrength.value = -(savedRadialStrength || 2.0);
+      //console.log('radial inverted', params.radialStrength.value);
     }
   });
 
   addEventListener('keyup', (event) => {
-    if (event.code === 'Space') params.radialStrength.value = savedRadialStrength;
+    if (event.code === 'Space') {
+      params.radialEnabled.value = savedRadialEnabled;
+      params.radialStrength.value = savedRadialStrength;
+    }
   });
 
   addEventListener('resize', () => {
@@ -154,7 +178,7 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  //simulation.reset();
+  simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------
   renderer.setAnimationLoop(() => {

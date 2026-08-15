@@ -13,9 +13,7 @@ import {
   uint,
   uv,
   vec3,
-  vec4,
-  float,
-  vec2
+  vec4
 } from 'three/tsl';
 
 export function createSimulation({ renderer, scene, params, count = 131072 }) {
@@ -30,23 +28,17 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const i = instanceIndex;
     const p = positionBuffer.element(i);
     const v = velocityBuffer.element(i);
-    const iFloat = float(i);
 
-    const r1 = hash(vec2(iFloat, 11.0));
-    const r2 = hash(vec2(iFloat, 23.0));
-    const r3 = hash(vec2(iFloat, 37.0));
-    const r4 = hash(vec2(iFloat, 53.0));
-    const r5 = hash(vec2(iFloat, 71.0));
-    const r6 = hash(vec2(iFloat, 89.0));
+    const r1 = hash(i.add(uint(11)));
+    const r2 = hash(i.add(uint(23)));
+    const r3 = hash(i.add(uint(37)));
+    const r4 = hash(i.add(uint(53)));
+    const r5 = hash(i.add(uint(71)));
+    const r6 = hash(i.add(uint(89)));
 
     p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsSize.mul(0.45)));
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
   })().compute(count).setName('Initialize Particles');
-
-/*  const resetVelocityCompute = Fn(() => {
-  const v = velocityBuffer.element(instanceIndex);
-  v.assign(vec3(0.0)); // Frena las partículas en seco
-})().compute(count).setName('Reset Velocity'); */
 
   // UPDATE / COMPUTE SHADER ----------------------------------------------
   // This is the conceptual heart of the project:
@@ -136,26 +128,10 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     scene.remove(mesh);
   }
 
-const resetVelocityCompute = Fn(() => {
- const i = instanceIndex;
- const p = positionBuffer.element(i);
- const v = velocityBuffer.element(i);
- 
- const iFloat = float(i);
- const r1 = hash(vec2(iFloat, 123.0));
- const r2 = hash(vec2(iFloat, 456.0));
- const r3 = hash(vec2(iFloat, 789.0));
- const noise = vec3(r1, r2, r3).sub(0.5);
-
- p.addAssign(noise.mul(0.15));
- v.assign(noise.mul(0.05));
-})().compute(count).setName('Reset Velocity');
-
   return {
     count,
     positionBuffer,
     velocityBuffer,
-    resetVelocity: () => renderer.compute(resetVelocityCompute),
     reset,
     stepSimulation,
     dispose
