@@ -50,6 +50,10 @@ async function main() {
   orbit.target.set(0, 0, 0);
 
   const params = createParameters();
+  // El atractor arranca en el origen del mundo, no donde esté el mouse.
+  // El pointermove de más abajo lo seguirá moviendo en cuanto el usuario
+  // interactúe, pero el estado inicial ya no depende de eso.
+  params.attractor.value.set(0, 0, 0);
   const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
 
   // LAB HELPERS -----------------------------------------------------------
@@ -180,6 +184,10 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
+  // Estado por defecto al arrancar: fuerza de atracción activa, atractor
+  // fijo en el origen (ya seteado arriba). De ahí que la simulación
+  // "colapse" hacia el centro desde el primer frame, sin tocar el mouse.
+  applyPreset('attract');
   simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------
