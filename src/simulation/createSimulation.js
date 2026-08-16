@@ -11,6 +11,7 @@ import {
   mod,
   step,
   uint,
+  uniform,
   uv,
   vec3,
   vec4
@@ -40,6 +41,29 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
   })().compute(count).setName('Initialize Particles');
 
+  // BURST STATE -------------------------------------------------------------
+  // Transitorio, gateado por posición: mientras esté activo, las partículas
+  // físicamente por encima (topBurst) o por debajo (bottomBurst) del centro
+  // invierten su signo radial (atracción -> repulsión) solo para ellas.
+  // No es un caso especial del integrador: es un multiplicador más sobre
+  // la misma fuerza radial de siempre.
+  const topBurst = uniform(0);
+  const bottomBurst = uniform(0);
+  let topBurstTimeout = null;
+  let bottomBurstTimeout = null;
+
+  function triggerTopBurst(durationMs = 250) {
+    topBurst.value = 1;
+    clearTimeout(topBurstTimeout);
+    topBurstTimeout = setTimeout(() => { topBurst.value = 0; }, durationMs);
+  }
+
+  function triggerBottomBurst(durationMs = 250) {
+    bottomBurst.value = 1;
+    clearTimeout(bottomBurstTimeout);
+    bottomBurstTimeout = setTimeout(() => { bottomBurst.value = 0; }, durationMs);
+  }
+
   // UPDATE / COMPUTE SHADER ----------------------------------------------
   // This is the conceptual heart of the project:
   // state -> forces -> acceleration -> velocity -> position.
@@ -57,8 +81,16 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const toAttractor = params.attractor.sub(p);
     const distance = max(toAttractor.length(), params.softening);
     const radialDirection = toAttractor.div(distance);
+
+    // Burst: 1 si esta partícula está en la mitad "activa" (arriba/abajo)
+    // Y ese burst está encendido; 0 en cualquier otro caso.
+    const topFlip = step(0.0, p.y).mul(topBurst);
+    const bottomFlip = step(p.y, 0.0).mul(bottomBurst);
+    const radialSign = mix(1.0, -1.0, max(topFlip, bottomFlip));
+
     const radialForce = radialDirection
       .mul(params.radialStrength)
+      .mul(radialSign)
       .div(distance.pow(2))
       .mul(params.radialEnabled);
     force.addAssign(radialForce);
@@ -134,6 +166,8 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     velocityBuffer,
     reset,
     stepSimulation,
-    dispose
+    dispose,
+    triggerTopBurst,
+    triggerBottomBurst
   };
 }

@@ -50,9 +50,9 @@ async function main() {
   orbit.target.set(0, 0, 0);
 
   const params = createParameters();
-  // El atractor arranca en el origen del mundo, no donde esté el mouse.
-  // El pointermove de más abajo lo seguirá moviendo en cuanto el usuario
-  // interactúe, pero el estado inicial ya no depende de eso.
+  // El atractor queda fijo en el origen del mundo de forma PERMANENTE.
+  // Ya no hay ningún listener de mouse que lo mueva (ver más abajo):
+  // todo el movimiento del sistema sale de las fuerzas mismas.
   params.attractor.value.set(0, 0, 0);
   const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
 
@@ -65,22 +65,9 @@ async function main() {
   const axes = new THREE.AxesHelper(1.5);
   scene.add(axes);
 
-  // POINTER -> WORLD POSITION --------------------------------------------
-  // This is a useful camera concept: screen coordinates are not world coords.
-  const pointerNdc = new THREE.Vector2();
-  const raycaster = new THREE.Raycaster();
-  const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const hit = new THREE.Vector3();
-
-  addEventListener('pointermove', (event) => {
-    pointerNdc.x = (event.clientX / innerWidth) * 2 - 1;
-    pointerNdc.y = -(event.clientY / innerHeight) * 2 + 1;
-    raycaster.setFromCamera(pointerNdc, camera);
-    if (raycaster.ray.intersectPlane(interactionPlane, hit)) {
-      params.attractor.value.copy(hit);
-      attractorHelper.position.copy(hit);
-    }
-  });
+  // El atractor ya NO sigue al mouse. Todo lo que le pasa al sistema
+  // (órbita, saltos con las flechas, etc.) surge de las fuerzas del
+  // compute shader, guiado por física, no por input directo de posición.
 
   let paused = false;
   let mode = 'LAB';
@@ -129,7 +116,7 @@ async function main() {
     attractorHelper.visible = lab;
     //orbit.enabled = lab;
     hud.innerHTML = lab
-      ? '<strong>LAB</strong> · P: performance · R: reset · 1–5: pruebas'
+      ? '<strong>LAB</strong> · P: performance · R: reset · 1–5: pruebas · ↑/↓: salto'
       //: '<strong>PERFORMANCE</strong> · P: lab · espacio: invertir radial · puntero: atractor';
       : '';
   };
@@ -160,6 +147,17 @@ async function main() {
     if (event.code === 'Digit4') applyPreset('repel');
     if (event.code === 'Digit5') applyPreset('vortex');
 
+    // Saltos transitorios: las partículas de arriba (o abajo) del centro
+    // pasan a repulsión por un instante y vuelven solas a la atracción.
+    if (event.code === 'ArrowUp') {
+      event.preventDefault();
+      simulation.triggerTopBurst();
+    }
+    if (event.code === 'ArrowDown') {
+      event.preventDefault();
+      simulation.triggerBottomBurst();
+    }
+
     if (event.code === 'Space') {
       event.preventDefault();
       //savedRadialStrength = params.radialStrength.value || 2.0;
@@ -184,10 +182,11 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // Estado por defecto al arrancar: fuerza de atracción activa, atractor
-  // fijo en el origen (ya seteado arriba). De ahí que la simulación
-  // "colapse" hacia el centro desde el primer frame, sin tocar el mouse.
-  applyPreset('attract');
+  // Estado por defecto al arrancar: atracción + fuerza tangencial + drag,
+  // para que las partículas orbiten de forma estable alrededor del
+  // atractor fijo en el origen, en vez de colapsar en línea recta y
+  // oscilar sin control (que es lo que pasaría con atracción pura).
+  applyPreset('vortex');
   simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------
