@@ -186,7 +186,7 @@ async function main() {
   // para que las partículas orbiten de forma estable alrededor del
   // atractor fijo en el origen, en vez de colapsar en línea recta y
   // oscilar sin control (que es lo que pasaría con atracción pura).
-  applyPreset('vortex');
+  applyPreset('attract');
   simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------
