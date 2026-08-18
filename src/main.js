@@ -186,7 +186,14 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
+<<<<<<< HEAD
   // Estado por defecto al arrancar: atracción pura hacia el origen.
+=======
+  // Estado por defecto al arrancar: atracción + fuerza tangencial + drag,
+  // para que las partículas orbiten de forma estable alrededor del
+  // atractor fijo en el origen, en vez de colapsar en línea recta y
+  // oscilar sin control (que es lo que pasaría con atracción pura).
+>>>>>>> 95d14fd1a141ce59d37c4d205ed08fdc034630df
   applyPreset('attract');
   simulation.reset();
 
