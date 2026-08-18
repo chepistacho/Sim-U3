@@ -9,6 +9,7 @@ import {
   max,
   mix,
   mod,
+  smoothstep,
   step,
   uint,
   uniform,
@@ -44,9 +45,9 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   // BURST STATE -------------------------------------------------------------
   // Transitorio, gateado por dirección: mientras esté activo, solo las
   // partículas que están realmente "en la punta" de arriba (topBurst) o
-  // de abajo (bottomBurst) del sistema invierten su signo radial
-  // (atracción -> repulsión). No es un caso especial del integrador: es
-  // un multiplicador más sobre la misma fuerza radial de siempre.
+  // de abajo (bottomBurst) del sistema reciben un empujón hacia afuera.
+  // Es un force term propio, NO una inversión de signo de la atracción
+  // (ver por qué en el comentario junto a su uso, más abajo).
   const topBurst = uniform(0);
   const bottomBurst = uniform(0);
   let topBurstTimeout = null;
@@ -55,16 +56,20 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   // Coseno del semiángulo del cono de selección, medido desde el eje +Y
   // (o -Y para abajo), respecto al atractor. Más cerca de 1 = cono más
   // angosto = "montañita" más chica y puntual. Más cerca de 0 = medio
-  // sistema entero (lo que causaba el efecto de explosión).
+  // sistema entero.
   const BURST_CONE = 0.85; // ~32° de semiángulo alrededor de la vertical
 
-  function triggerTopBurst(durationMs = 250) {
+  // Magnitud fija del empujón, deliberadamente independiente de
+  // radialStrength y SIN caída por 1/distancia² (ver comentario abajo).
+  const BURST_STRENGTH = 10;
+
+  function triggerTopBurst(durationMs = 120) {
     topBurst.value = 1;
     clearTimeout(topBurstTimeout);
     topBurstTimeout = setTimeout(() => { topBurst.value = 0; }, durationMs);
   }
 
-  function triggerBottomBurst(durationMs = 250) {
+  function triggerBottomBurst(durationMs = 120) {
     bottomBurst.value = 1;
     clearTimeout(bottomBurstTimeout);
     bottomBurstTimeout = setTimeout(() => { bottomBurst.value = 0; }, durationMs);
@@ -87,24 +92,32 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const toAttractor = params.attractor.sub(p);
     const distance = max(toAttractor.length(), params.softening);
     const radialDirection = toAttractor.div(distance);
-
-    // Burst: solo la "punta" de arriba/abajo del sistema salta, no medio
-    // sistema. Se mide el ángulo entre "lejos del atractor" y el eje +Y:
-    // upAlignment = 1 -> justo arriba del atractor; -1 -> justo abajo.
-    // Solo las partículas dentro de un cono angular estrecho (BURST_CONE)
-    // se consideran "la punta". Al comparar direcciones en vez de alturas
-    // absolutas, funciona igual sin importar qué tan grande sea la órbita.
-    const upAlignment = radialDirection.y.mul(-1.0);
-    const topFlip = step(BURST_CONE, upAlignment).mul(topBurst);
-    const bottomFlip = step(BURST_CONE, upAlignment.mul(-1.0)).mul(bottomBurst);
-    const radialSign = mix(1.0, -1.0, max(topFlip, bottomFlip));
-
     const radialForce = radialDirection
       .mul(params.radialStrength)
-      .mul(radialSign)
       .div(distance.pow(2))
       .mul(params.radialEnabled);
     force.addAssign(radialForce);
+
+    // 2b) BURST: empujón hacia afuera propio, no una inversión de signo
+    // de la fuerza radial. La versión anterior reutilizaba el mismo
+    // 1/distancia² de la atracción, y eso la hacía invisible: bajo
+    // atracción pura (sin componente tangencial) cada partícula pasa la
+    // mayor parte del tiempo LEJOS del centro (cae rápido, "flota" lento
+    // en su punto más alejado, como una órbita kepleriana degenerada) —
+    // justo donde 1/distancia² hace la fuerza casi nula, volteada o no.
+    // Con magnitud fija, el empujón no se diluye por la distancia.
+    //
+    // step() = corte binario (dentro del cono: empuje completo, afuera:
+    // cero) -> borde recto -> forma de CONO. smoothstep() interpola
+    // suavemente entre 0 (borde del cono) y 1 (justo en el centro/polo)
+    // -> el empuje se atenúa gradualmente hacia los bordes -> PROTUBERANCIA
+    // redondeada en vez de un cono de bordes duros.
+    const awayFromAttractor = radialDirection.mul(-1.0);
+    const upAlignment = awayFromAttractor.y;
+    const topFalloff = smoothstep(BURST_CONE, 1.0, upAlignment).mul(topBurst);
+    const bottomFalloff = smoothstep(BURST_CONE, 1.0, upAlignment.mul(-1.0)).mul(bottomBurst);
+    const burstForce = awayFromAttractor.mul(BURST_STRENGTH).mul(max(topFalloff, bottomFalloff));
+    force.addAssign(burstForce);
 
     // 3) VORTEX FORCE: tangent to the radial direction around Z.
     const zAxis = vec3(0.0, 0.0, 1.0);
