@@ -56,7 +56,7 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   // (o -Y para abajo), respecto al atractor. Más cerca de 1 = cono más
   // angosto = "montañita" más chica y puntual. Más cerca de 0 = medio
   // sistema entero (lo que causaba el efecto de explosión).
-  const BURST_CONE = 0.85; // ~32° de semiángulo alrededor de la vertical
+  const BURST_CONE = 0.3; // ~32° de semiángulo alrededor de la vertical
 
   function triggerTopBurst(durationMs = 250) {
     topBurst.value = 1;
