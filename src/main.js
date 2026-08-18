@@ -54,6 +54,10 @@ async function main() {
   // Ya no hay ningún listener de mouse que lo mueva (ver más abajo):
   // todo el movimiento del sistema sale de las fuerzas mismas.
   params.attractor.value.set(0, 0, 0);
+  // Valores por defecto pedidos explícitamente, independientes de lo
+  // que traiga parameters.js.
+  params.maxSpeed.value = 2;
+  params.particleSize.value = 0.008;
   const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
 
   // LAB HELPERS -----------------------------------------------------------
@@ -182,11 +186,8 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // Estado por defecto al arrancar: atracción + fuerza tangencial + drag,
-  // para que las partículas orbiten de forma estable alrededor del
-  // atractor fijo en el origen, en vez de colapsar en línea recta y
-  // oscilar sin control (que es lo que pasaría con atracción pura).
-  applyPreset('vortex');
+  // Estado por defecto al arrancar: atracción pura hacia el origen.
+  applyPreset('attract');
   simulation.reset();
 
   // FRAME LOOP ------------------------------------------------------------

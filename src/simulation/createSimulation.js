@@ -42,15 +42,21 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   })().compute(count).setName('Initialize Particles');
 
   // BURST STATE -------------------------------------------------------------
-  // Transitorio, gateado por posición: mientras esté activo, las partículas
-  // físicamente por encima (topBurst) o por debajo (bottomBurst) del centro
-  // invierten su signo radial (atracción -> repulsión) solo para ellas.
-  // No es un caso especial del integrador: es un multiplicador más sobre
-  // la misma fuerza radial de siempre.
+  // Transitorio, gateado por dirección: mientras esté activo, solo las
+  // partículas que están realmente "en la punta" de arriba (topBurst) o
+  // de abajo (bottomBurst) del sistema invierten su signo radial
+  // (atracción -> repulsión). No es un caso especial del integrador: es
+  // un multiplicador más sobre la misma fuerza radial de siempre.
   const topBurst = uniform(0);
   const bottomBurst = uniform(0);
   let topBurstTimeout = null;
   let bottomBurstTimeout = null;
+
+  // Coseno del semiángulo del cono de selección, medido desde el eje +Y
+  // (o -Y para abajo), respecto al atractor. Más cerca de 1 = cono más
+  // angosto = "montañita" más chica y puntual. Más cerca de 0 = medio
+  // sistema entero (lo que causaba el efecto de explosión).
+  const BURST_CONE = 0.85; // ~32° de semiángulo alrededor de la vertical
 
   function triggerTopBurst(durationMs = 250) {
     topBurst.value = 1;
@@ -82,10 +88,15 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const distance = max(toAttractor.length(), params.softening);
     const radialDirection = toAttractor.div(distance);
 
-    // Burst: 1 si esta partícula está en la mitad "activa" (arriba/abajo)
-    // Y ese burst está encendido; 0 en cualquier otro caso.
-    const topFlip = step(0.0, p.y).mul(topBurst);
-    const bottomFlip = step(p.y, 0.0).mul(bottomBurst);
+    // Burst: solo la "punta" de arriba/abajo del sistema salta, no medio
+    // sistema. Se mide el ángulo entre "lejos del atractor" y el eje +Y:
+    // upAlignment = 1 -> justo arriba del atractor; -1 -> justo abajo.
+    // Solo las partículas dentro de un cono angular estrecho (BURST_CONE)
+    // se consideran "la punta". Al comparar direcciones en vez de alturas
+    // absolutas, funciona igual sin importar qué tan grande sea la órbita.
+    const upAlignment = radialDirection.y.mul(-1.0);
+    const topFlip = step(BURST_CONE, upAlignment).mul(topBurst);
+    const bottomFlip = step(BURST_CONE, upAlignment.mul(-1.0)).mul(bottomBurst);
     const radialSign = mix(1.0, -1.0, max(topFlip, bottomFlip));
 
     const radialForce = radialDirection
