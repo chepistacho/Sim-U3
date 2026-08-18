@@ -56,13 +56,8 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   // Coseno del semiángulo del cono de selección, medido desde el eje +Y
   // (o -Y para abajo), respecto al atractor. Más cerca de 1 = cono más
   // angosto = "montañita" más chica y puntual. Más cerca de 0 = medio
-<<<<<<< HEAD
   // sistema entero.
   const BURST_CONE = 0.85; // ~32° de semiángulo alrededor de la vertical
-=======
-  // sistema entero (lo que causaba el efecto de explosión).
-  const BURST_CONE = 0.3; // ~32° de semiángulo alrededor de la vertical
->>>>>>> 375140408325d85c649541ae206563bc145b1dd4
 
   // Magnitud fija del empujón, deliberadamente independiente de
   // radialStrength y SIN caída por 1/distancia² (ver comentario abajo).
