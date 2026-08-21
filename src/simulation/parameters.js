@@ -24,6 +24,10 @@ export function createParameters() {
     vortexStrength: uniform(1.4),
 
     dragEnabled: uniform(1.0),
-    dragCoefficient: uniform(0.12)
+    dragCoefficient: uniform(0.12),
+
+    mouseActive: uniform(0.0),
+    mousePos: uniform(new THREE.Vector3(0.0, 0.0, 0.0)),
+    mouseStrength: uniform(8.0)
   };
 }

@@ -60,6 +60,26 @@ async function main() {
   params.particleSize.value = 0.008;
   const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
 
+  // MOUSE TRACKING --------------------------------------------------------
+  const raycaster = new THREE.Raycaster();
+  const mousePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+  addEventListener('pointermove', (e) => {
+    const x = (e.clientX / innerWidth) * 2 - 1;
+    const y = -(e.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    const target = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(mousePlane, target)) {
+      params.mousePos.value.copy(target);
+    }
+  });
+
+  // Ya no usamos pointerdown/pointerup. El atractor extra se activa con Space.
+  
+  addEventListener('contextmenu', (e) => { 
+    if (!e.target.closest('aside')) e.preventDefault(); 
+  });
+
   // LAB HELPERS -----------------------------------------------------------
   const attractorHelper = new THREE.Mesh(
     new THREE.SphereGeometry(0.12, 16, 12),
@@ -89,15 +109,29 @@ async function main() {
 
     if (id === 'inertia') {
       params.initialSpeed.value = 0.8;
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.02; // Un poco de fricción para que se detengan suavemente
     } else if (id === 'wind') {
       params.windEnabled.value = 1;
       params.wind.value.set(1.5, 0, 0);
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 0.5; // Espiral sutil en el viento
     } else if (id === 'attract') {
       params.radialEnabled.value = 1;
       params.radialStrength.value = 3.0;
+      // Drag para disipar momento angular que pudo haber quedado de un
+      // preset anterior (p. ej. vortex). Una fuerza puramente radial no
+      // cancela velocidad tangencial -> sin esto, cualquier partícula
+      // con "giro" residual queda orbitando en vez de caer al centro.
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.15;
     } else if (id === 'repel') {
       params.radialEnabled.value = 1;
       params.radialStrength.value = -3.0;
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.05;
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 1.0; // Se expande como una galaxia en formación
     } else if (id === 'vortex') {
       params.radialEnabled.value = 1;
       params.radialStrength.value = 1.0;
@@ -105,12 +139,54 @@ async function main() {
       params.vortexStrength.value = 3.0;
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.08;
+    } else if (id === 'blackhole') {
+      params.radialEnabled.value = 1;
+      params.radialStrength.value = 8.0;
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 6.0;
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.4; // Tira todo hacia el centro con gran fuerza y giro
+    } else if (id === 'storm') {
+      params.windEnabled.value = 1;
+      params.wind.value.set(2.0, 1.0, 0.0);
+      params.radialEnabled.value = 1;
+      params.radialStrength.value = -1.5;
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 4.0;
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.05; // Expansión y viento caótico
     }
     // No reiniciamos la simulación aquí: las partículas conservan su
     // posición y velocidad actuales; solo cambia el campo de fuerzas
     // que el compute shader aplicará a partir del próximo frame.
     panel?.refresh();
   };
+
+  // BEAT (tecla B): literalmente encadenar dos presets reales con un
+  // delay corto entre medio -- lo mismo que pasaría si presionaras el 4
+  // y, casi enseguida, el 3. Nada de fuerzas aparte: es el mismo
+  // applyPreset de siempre, dos veces. Importante: al terminar, el
+  // sistema se queda en el segundo preset (igual que quedaría si de
+  // verdad presionaras esas dos teclas) -- no vuelve solo al que estaba
+  // antes. (La tecla N usa un mecanismo distinto: ver triggerBeatOut en
+  // createSimulation.js.)
+  let beatTimeout = null;
+
+  function triggerBeatIn(delayMs = 90) {
+    clearTimeout(beatTimeout);
+    applyPreset('repel');   // como presionar el 4...
+    beatTimeout = setTimeout(() => {
+      applyPreset('attract'); // ...y ahí mismo el 3
+    }, delayMs);
+  }
+
+  function triggerBeatVortex(delayMs = 90) {
+    clearTimeout(beatTimeout);
+    applyPreset('vortex');   // como presionar el 5...
+    beatTimeout = setTimeout(() => {
+      applyPreset('attract'); // ...y ahí mismo el 3
+    }, delayMs);
+  }
 
   const setMode = (next) => {
     mode = next;
@@ -120,7 +196,7 @@ async function main() {
     attractorHelper.visible = lab;
     //orbit.enabled = lab;
     hud.innerHTML = lab
-      ? '<strong>LAB</strong> · P: performance · R: reset · 1–5: pruebas · ↑/↓: salto'
+      ? '<strong>LAB</strong> · P: performance · R: reset · 1–7: pruebas · ↑/↓: salto · B/N/V: beat'
       //: '<strong>PERFORMANCE</strong> · P: lab · espacio: invertir radial · puntero: atractor';
       : '';
   };
@@ -150,6 +226,8 @@ async function main() {
     if (event.code === 'Digit3') applyPreset('attract');
     if (event.code === 'Digit4') applyPreset('repel');
     if (event.code === 'Digit5') applyPreset('vortex');
+    if (event.code === 'Digit6') applyPreset('blackhole');
+    if (event.code === 'Digit7') applyPreset('storm');
 
     // Saltos transitorios: las partículas de arriba (o abajo) del centro
     // pasan a repulsión por un instante y vuelven solas a la atracción.
@@ -162,21 +240,30 @@ async function main() {
       simulation.triggerBottomBurst();
     }
 
+    // Beat. B = cadena literal repel->attract. N = fuerza propia
+    // repulsión -> atracción (ver createSimulation.js). V = cadena
+    // literal vortex->attract, delay más largo.
+    if (event.code === 'KeyB') {
+      triggerBeatIn();
+    }
+    if (event.code === 'KeyN') {
+      simulation.triggerBeatOut();
+    }
+    if (event.code === 'KeyV') {
+      triggerBeatVortex();
+    }
+
     if (event.code === 'Space') {
       event.preventDefault();
-      //savedRadialStrength = params.radialStrength.value || 2.0;
-      savedRadialStrength = params.radialStrength.value;
-      savedRadialEnabled = params.radialEnabled.value;
-      params.radialEnabled.value = 1;
-      params.radialStrength.value = -(savedRadialStrength || 2.0);
-      //console.log('radial inverted', params.radialStrength.value);
+      // Al mantener presionada la barra espaciadora, el atractor del mouse se activa
+      params.mouseActive.value = 1;
     }
   });
 
   addEventListener('keyup', (event) => {
     if (event.code === 'Space') {
-      params.radialEnabled.value = savedRadialEnabled;
-      params.radialStrength.value = savedRadialStrength;
+      // Al soltar la barra espaciadora, se desactiva
+      params.mouseActive.value = 0;
     }
   });
 

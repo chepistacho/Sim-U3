@@ -23,6 +23,13 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
   // Each particle owns position and velocity. The arrays live in GPU storage.
   const positionBuffer = instancedArray(count, 'vec3');
   const velocityBuffer = instancedArray(count, 'vec3');
+  // Eje de giro propio de cada partícula. Antes el vórtice usaba un solo
+  // eje Z global para todas las partículas, así que la fuerza tangencial
+  // siempre caía en el plano XY -> el sistema se aplanaba en un disco.
+  // Con un eje random POR PARTÍCULA (fijo desde el init), cada una sigue
+  // orbitando en un plano, pero esos planos quedan orientados al azar en
+  // las 3 dimensiones -> el conjunto llena una forma 3D real.
+  const spinAxisBuffer = instancedArray(count, 'vec3');
 
   // INITIALIZATION --------------------------------------------------------
   // A compute pass writes the initial state for every particle in parallel.
@@ -30,6 +37,7 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const i = instanceIndex;
     const p = positionBuffer.element(i);
     const v = velocityBuffer.element(i);
+    const spin = spinAxisBuffer.element(i);
 
     const r1 = hash(i.add(uint(11)));
     const r2 = hash(i.add(uint(23)));
@@ -37,9 +45,13 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const r4 = hash(i.add(uint(53)));
     const r5 = hash(i.add(uint(71)));
     const r6 = hash(i.add(uint(89)));
+    const r7 = hash(i.add(uint(103)));
+    const r8 = hash(i.add(uint(127)));
+    const r9 = hash(i.add(uint(151)));
 
     p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsSize.mul(0.45)));
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
+    spin.assign(vec3(r7, r8, r9).sub(0.5).normalize());
   })().compute(count).setName('Initialize Particles');
 
   // BURST STATE -------------------------------------------------------------
@@ -75,6 +87,32 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     bottomBurstTimeout = setTimeout(() => { bottomBurst.value = 0; }, durationMs);
   }
 
+  // BEAT STATE ----------------------------------------------------------
+  // Pulso rítmico GLOBAL (no gateado por posición como el burst): una
+  // repulsión breve, inmediatamente encadenada a una atracción algo más
+  // larga para que todo vuelva a organizarse. beatPhase codifica la fase
+  // actual: +1 = empuja hacia afuera, -1 = tira hacia adentro, 0 = idle
+  // (el preset activo sigue mandando normal).
+  const beatPhase = uniform(0);
+  let beatRepelTimeout = null;
+  let beatAttractTimeout = null;
+
+  // Magnitud fija, mismo motivo que BURST_STRENGTH: sin caída por
+  // distancia, para que no se diluya sea cual sea el preset activo.
+  const BEAT_STRENGTH = 12;
+
+  function triggerBeatOut(repelMs = 70, attractMs = 200) {
+    clearTimeout(beatRepelTimeout);
+    clearTimeout(beatAttractTimeout);
+    beatPhase.value = 1; // fase 1: repulsión
+    beatRepelTimeout = setTimeout(() => {
+      beatPhase.value = -1; // fase 2: atracción
+      beatAttractTimeout = setTimeout(() => {
+        beatPhase.value = 0; // idle: vuelve al preset activo
+      }, attractMs);
+    }, repelMs);
+  }
+
   // UPDATE / COMPUTE SHADER ----------------------------------------------
   // This is the conceptual heart of the project:
   // state -> forces -> acceleration -> velocity -> position.
@@ -92,10 +130,17 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const toAttractor = params.attractor.sub(p);
     const distance = max(toAttractor.length(), params.softening);
     const radialDirection = toAttractor.div(distance);
-    const radialForce = radialDirection
-      .mul(params.radialStrength)
-      .div(distance.pow(2))
-      .mul(params.radialEnabled);
+    const awayFromAttractor = radialDirection.mul(-1.0);
+
+    // Comportamiento intrínseco tipo Lennard-Jones:
+    // Las partículas sienten una atracción gravitacional (1/d^2) a lo lejos,
+    // pero una repulsión muy fuerte (1/d^4) cuando están demasiado cerca del centro.
+    // Esto crea un radio de equilibrio natural donde se suspenden sin necesidad de colisiones.
+    const attraction = params.radialStrength.div(distance.pow(2));
+    const repulsion = uniform(3.5).div(distance.pow(4)); // Factor de repulsión a corta distancia
+
+    const netRadial = attraction.sub(repulsion).mul(params.radialEnabled);
+    const radialForce = radialDirection.mul(netRadial);
     force.addAssign(radialForce);
 
     // 2b) BURST: empujón hacia afuera propio, no una inversión de signo
@@ -112,16 +157,32 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     // suavemente entre 0 (borde del cono) y 1 (justo en el centro/polo)
     // -> el empuje se atenúa gradualmente hacia los bordes -> PROTUBERANCIA
     // redondeada en vez de un cono de bordes duros.
-    const awayFromAttractor = radialDirection.mul(-1.0);
     const upAlignment = awayFromAttractor.y;
     const topFalloff = smoothstep(BURST_CONE, 1.0, upAlignment).mul(topBurst);
     const bottomFalloff = smoothstep(BURST_CONE, 1.0, upAlignment.mul(-1.0)).mul(bottomBurst);
     const burstForce = awayFromAttractor.mul(BURST_STRENGTH).mul(max(topFalloff, bottomFalloff));
     force.addAssign(burstForce);
 
-    // 3) VORTEX FORCE: tangent to the radial direction around Z.
-    const zAxis = vec3(0.0, 0.0, 1.0);
-    const tangent = zAxis.cross(radialDirection);
+    // 2c) BEAT: pulso global, aplicado a TODAS las partículas por igual
+    // (no gateado por dirección como el burst). Reusa awayFromAttractor.
+    // Es puramente radial -> no le agrega momento angular nuevo al
+    // sistema.
+    const beatForce = awayFromAttractor.mul(BEAT_STRENGTH).mul(beatPhase);
+    force.addAssign(beatForce);
+
+    // 2d) MOUSE ATTRACTOR: Fuerza extra interactiva (Activada con Space)
+    const toMouse = params.mousePos.sub(p);
+    const mouseDist = max(toMouse.length(), params.softening);
+    const mouseDir = toMouse.div(mouseDist);
+    // Atracción que decae con la distancia al cuadrado
+    const mouseForce = mouseDir.mul(params.mouseStrength).div(mouseDist.pow(2)).mul(params.mouseActive);
+    force.addAssign(mouseForce);
+
+    // 3) VORTEX FORCE: tangent to the radial direction, around ESTE
+    // eje propio de la partícula (no un eje Z compartido) -> rotación
+    // 3D real en vez de estar encerrada en el plano XY.
+    const spinAxis = spinAxisBuffer.element(instanceIndex);
+    const tangent = spinAxis.cross(radialDirection);
     force.addAssign(tangent.mul(params.vortexStrength).mul(params.vortexEnabled));
 
     // 4) LINEAR DRAG: F = -c v
@@ -192,6 +253,7 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     stepSimulation,
     dispose,
     triggerTopBurst,
-    triggerBottomBurst
+    triggerBottomBurst,
+    triggerBeatOut
   };
 }
